@@ -1,8 +1,9 @@
 {
-	"name": "measuredin",
-	"displayName": "measuredin",
-	"description": "",
+	"name": "codepilot",
+	"displayName": "codepilot",
+	"description": "CodePilot is your assistant for code discovery and navigation",
 	"version": "0.0.1",
+	"publisher": "measuredin",
 	"engines": {
 		"vscode": "^1.43.0"
 	},
@@ -16,8 +17,12 @@
 	"contributes": {
 		"commands": [
 			{
-				"command": "extension.helloWorld",
-				"title": "Hello World"
+				"command": "extension.enableCodePilot",
+				"title": "Code Pilot: Enable"
+			},
+			{
+				"command": "extension.disableCodePilot",
+				"title": "Code Pilot: Disable"
 			}
 		]
 	},
