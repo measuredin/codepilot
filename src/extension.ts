@@ -1,4 +1,5 @@
 import { exec } from 'child_process';
+import * as fs from 'fs';
 import * as vscode from 'vscode';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -17,9 +18,11 @@ class CodePilot {
 
 	private subscriptions: vscode.Disposable[] = [];
 	private isEnabled = false;
+
+	private gitHeadWatcher? : fs.FSWatcher;
+	private gitRootDir? : string;
 	private gitCommit? : string;
 	private gitHead? : string;
-	private gitDir? : string;
 
 	private log(msg: string) {
 		console.log(`CodePilot [${new Date}] - ${msg}`);
@@ -29,14 +32,23 @@ class CodePilot {
 		if (this.isEnabled) {
 			return;
 		}
-		exec('git rev-parse --git-dir', (error, stdout, stderr) => {
+		exec('git rev-parse --show-toplevel', (error, stdout, stderr) => {
 			if (error) {
-				this.log('failed to get git directory');
+				this.log('failed to get git root directory');
 				this.disable();
 			}
 			if (stdout) {
-				this.log(`git directory: ${stdout}`);
-				this.gitDir = stdout;
+				this.log(`git root: ${stdout}`);
+				this.gitRootDir = stdout.trim();
+				try {
+					this.gitHeadWatcher = fs.watch(`${this.gitRootDir}/.git`, "utf8", (event, filename) => {
+						this.log('git branch changed');
+						this.log(event);
+						this.log(filename);
+					});
+				} catch (err) {
+					this.log('failed to watch git directory');
+				}
 			}
 		});
 		this.log('reporting for duty');
@@ -60,6 +72,9 @@ class CodePilot {
 		this.subscriptions.forEach((listener) => {
 			listener.dispose();
 		});
+		if (this.gitHeadWatcher) {
+			this.gitHeadWatcher.close();
+		}
 		this.isEnabled = false;
 	}
 
