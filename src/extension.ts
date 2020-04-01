@@ -1,3 +1,4 @@
+import { exec } from 'child_process';
 import * as vscode from 'vscode';
 
 export function activate(context: vscode.ExtensionContext) {
@@ -15,9 +16,30 @@ export function deactivate() {}
 class CodePilot {
 
 	private subscriptions: vscode.Disposable[] = [];
+	private isEnabled = false;
+	private gitCommit? : string;
+	private gitHead? : string;
+	private gitDir? : string;
+
+	private log(msg: string) {
+		console.log(`CodePilot [${new Date}] - ${msg}`);
+	}
 
 	public enable() {
-		console.log('CodePilot reporting for duty');
+		if (this.isEnabled) {
+			return;
+		}
+		exec('git rev-parse --git-dir', (error, stdout, stderr) => {
+			if (error) {
+				this.log('failed to get git directory');
+				this.disable();
+			}
+			if (stdout) {
+				this.log(`git directory: ${stdout}`);
+				this.gitDir = stdout;
+			}
+		});
+		this.log('reporting for duty');
 		this.subscriptions.push(vscode.window.onDidChangeWindowState(this.windowStateHandler));
 		this.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(this.activeTextEditorHandler));
 		this.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(this.textEditorSelectionHandler));
@@ -27,13 +49,18 @@ class CodePilot {
 		this.subscriptions.push(vscode.workspace.onDidCloseTextDocument(this.textDocumentHandler));
 		this.subscriptions.push(vscode.debug.onDidStartDebugSession(this.debugSessionHandler));
 		this.subscriptions.push(vscode.debug.onDidChangeBreakpoints(this.breakpointHandler));
+		this.isEnabled = true;
 	}
 
 	public disable() {
-		console.log('CodePilot signing off');
+		if (!this.isEnabled) {
+			return;
+		}
+		this.log('signing off');
 		this.subscriptions.forEach((listener) => {
 			listener.dispose();
 		});
+		this.isEnabled = false;
 	}
 
 	private windowStateHandler(event: vscode.WindowState) {
