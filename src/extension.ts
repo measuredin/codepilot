@@ -21,8 +21,9 @@ class CodePilot {
 
 	private gitHeadWatcher? : fs.FSWatcher;
 	private gitRootDir? : string;
+	private gitDir? : string;
 	private gitCommit? : string;
-	private gitHead? : string;
+	private gitHead? : string; // possible detach HEAD mode
 
 	private log(msg: string) {
 		console.log(`CodePilot [${new Date}] - ${msg}`);
@@ -32,25 +33,37 @@ class CodePilot {
 		if (this.isEnabled) {
 			return;
 		}
+		let initError;
 		exec('git rev-parse --show-toplevel', (error, stdout, stderr) => {
 			if (error) {
 				this.log('failed to get git root directory');
-				this.disable();
+				initError = error;
+				return;
 			}
 			if (stdout) {
 				this.log(`git root: ${stdout}`);
 				this.gitRootDir = stdout.trim();
+				this.gitDir = `${this.gitRootDir}/.git`;
+				// watcher
 				try {
-					this.gitHeadWatcher = fs.watch(`${this.gitRootDir}/.git`, "utf8", (event, filename) => {
-						this.log('git branch changed');
-						this.log(event);
-						this.log(filename);
+					this.gitHeadWatcher = fs.watch(this.gitDir, "utf8", (event, filename) => {
+						if (filename === 'HEAD') {
+							this.log('git branch changed');
+							this.syncBranchAndCommit();
+						}
 					});
 				} catch (err) {
 					this.log('failed to watch git directory');
+					initError = err;
+					return;
 				}
 			}
 		});
+		if (initError) {
+			this.log('initialization error');
+			this.log(initError);
+			return;
+		}
 		this.log('reporting for duty');
 		this.subscriptions.push(vscode.window.onDidChangeWindowState(this.windowStateHandler));
 		this.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(this.activeTextEditorHandler));
@@ -76,6 +89,28 @@ class CodePilot {
 			this.gitHeadWatcher.close();
 		}
 		this.isEnabled = false;
+	}
+
+	// mimic git packed-ref via files
+	private syncBranchAndCommit() {
+		fs.readFile(`${this.gitDir}/HEAD`, "utf8", (error, data) => {
+			if (error) {
+				this.log('error reading HEAD');
+				return;
+			};
+			this.gitHead = data.trim();
+			this.gitCommit = this.gitHead; // in the case of detached HEAD
+			if (this.gitHead.startsWith('ref')) { // follow ref to get SHA
+				fs.readFile(`${this.gitDir}/${this.gitHead.substr(5)}`, "utf8", (error, data) => {
+					if (error) {
+						this.log('error following HEAD');
+						return;
+					};
+					this.gitCommit = data.trim();
+					this.log(`${this.gitHead} (HEAD) ${this.gitCommit} (SHA)`);
+				});
+			}
+		});
 	}
 
 	private windowStateHandler(event: vscode.WindowState) {
