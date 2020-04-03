@@ -5,7 +5,7 @@ import * as vscode from 'vscode';
 export function activate(context: vscode.ExtensionContext) {
 	const codepilot = new CodePilot();
 	context.subscriptions.push(vscode.commands.registerCommand("extension.enableCodePilot", () => {
-		codepilot.enable();
+		codepilot.enable(context);
 	}));
 	context.subscriptions.push(vscode.commands.registerCommand("extension.disableCodePilot", () => {
 		codepilot.disable();
@@ -19,6 +19,10 @@ class CodePilot {
 	private subscriptions: vscode.Disposable[] = [];
 	private isEnabled = false;
 
+	private extensionContext?: vscode.ExtensionContext;
+	private globalStoragePath?: string;
+	private dataStream?: fs.WriteStream;
+
 	private gitHeadWatcher? : fs.FSWatcher;
 	private gitRootDir? : string;
 	private gitDir? : string;
@@ -29,10 +33,13 @@ class CodePilot {
 		console.log(`CodePilot [${new Date}] - ${msg}`);
 	}
 
-	public enable() {
+	public enable(context: vscode.ExtensionContext) {
 		if (this.isEnabled) {
 			return;
 		}
+		this.extensionContext = context;
+		this.globalStoragePath = context.globalStoragePath;
+		this.dataStream = fs.createWriteStream(this.globalStoragePath, { flags: 'a' });
 		let initError;
 		exec('git rev-parse --show-toplevel', (error, stdout, stderr) => {
 			if (error) {
@@ -57,6 +64,7 @@ class CodePilot {
 					initError = err;
 					return;
 				}
+				this.syncBranchAndCommit();
 			}
 		});
 		if (initError) {
@@ -65,15 +73,15 @@ class CodePilot {
 			return;
 		}
 		this.log('reporting for duty');
-		this.subscriptions.push(vscode.window.onDidChangeWindowState(this.windowStateHandler));
-		this.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(this.activeTextEditorHandler));
-		this.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(this.textEditorSelectionHandler));
-		this.subscriptions.push(vscode.window.onDidOpenTerminal(this.terminalHandler));
-		this.subscriptions.push(vscode.window.onDidCloseTerminal(this.terminalHandler));
-		this.subscriptions.push(vscode.workspace.onDidChangeTextDocument(this.textDocumentHandler));
-		this.subscriptions.push(vscode.workspace.onDidCloseTextDocument(this.textDocumentHandler));
-		this.subscriptions.push(vscode.debug.onDidStartDebugSession(this.debugSessionHandler));
-		this.subscriptions.push(vscode.debug.onDidChangeBreakpoints(this.breakpointHandler));
+		this.subscriptions.push(vscode.window.onDidChangeWindowState(this.windowStateHandler.bind(this)));
+		this.subscriptions.push(vscode.window.onDidChangeActiveTextEditor(this.activeTextEditorHandler.bind(this)));
+		this.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(this.textEditorSelectionHandler.bind(this)));
+		this.subscriptions.push(vscode.window.onDidOpenTerminal(this.terminalHandler.bind(this)));
+		this.subscriptions.push(vscode.window.onDidCloseTerminal(this.terminalHandler.bind(this)));
+		this.subscriptions.push(vscode.workspace.onDidChangeTextDocument(this.textDocumentHandler.bind(this)));
+		this.subscriptions.push(vscode.workspace.onDidCloseTextDocument(this.textDocumentHandler.bind(this)));
+		this.subscriptions.push(vscode.debug.onDidStartDebugSession(this.debugSessionHandler.bind(this)));
+		this.subscriptions.push(vscode.debug.onDidChangeBreakpoints(this.breakpointHandler.bind(this)));
 		this.isEnabled = true;
 	}
 
@@ -82,6 +90,9 @@ class CodePilot {
 			return;
 		}
 		this.log('signing off');
+		if (this.dataStream) {
+			this.dataStream.end();
+		}
 		this.subscriptions.forEach((listener) => {
 			listener.dispose();
 		});
@@ -113,8 +124,22 @@ class CodePilot {
 		});
 	}
 
+	private streamEvent(obj: Object) {
+		const eventWithMeta = {
+			...obj,
+			commit: this.gitCommit,
+			ref: this.gitHead,
+			time: new Date().toISOString(),
+		};
+		if (this.dataStream) {
+			this.dataStream.write(JSON.stringify(eventWithMeta) + "\n");
+		} else {
+			this.log('file stream not setup');
+		}
+	}
+
 	private windowStateHandler(event: vscode.WindowState) {
-		console.log(event);
+		this.streamEvent({ type: 'window', ...event });
 	}
 
 	private activeTextEditorHandler(event?: vscode.TextEditor) {
