@@ -135,8 +135,8 @@ class CodePilot {
 								return;
 							};
 							if (this.gitCommit !== data.trim()) {
-								this.streamEvent({ type: 'git', event: 'commit' });
 								this.gitCommit = data.trim();
+								this.streamEvent({ type: 'git', event: 'commit' });
 							}
 						});
 					}
