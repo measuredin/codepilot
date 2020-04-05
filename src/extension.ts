@@ -114,7 +114,8 @@ class CodePilot {
 			this.gitHead = data.trim();
 			if (this.gitHead.startsWith('ref')) {
 				this.gitHead = this.gitHead.substr(5);
-				fs.readFile(`${this.gitDir}/${this.gitHead}`, "utf8", (error, data) => {
+				const ref = `${this.gitDir}/${this.gitHead}`;
+				fs.readFile(ref, "utf8", (error, data) => {
 					if (error) {
 						this.log(`error following HEAD to ${this.gitHead}`);
 						return;
@@ -124,10 +125,9 @@ class CodePilot {
 				if (this.gitCommitWatcher) { // reset watcher
 					this.gitCommitWatcher.close();
 				}
-				
-				this.gitCommitWatcher = fs.watch(`${this.gitDir}/${this.gitHead}`, "utf8", (event, filename) => {
+				this.gitCommitWatcher = fs.watch(ref.split('/').slice(0, -1).join('/'), "utf8", (event, filename) => {
 					this.log('git commit');
-					fs.readFile(`${this.gitDir}/${this.gitHead}`, "utf8", (error, data) => {
+					fs.readFile(ref, "utf8", (error, data) => {
 						if (error) {
 							this.log(`error following HEAD to ${this.gitHead}`);
 							return;
