@@ -24,6 +24,7 @@ class CodePilot {
 	private dataStream?: fs.WriteStream;
 
 	private gitHeadWatcher? : fs.FSWatcher;
+	private gitCommitWatcher? : fs.FSWatcher;
 	private gitRootDir? : string;
 	private gitDir? : string;
 	private gitCommit? : string;
@@ -38,7 +39,7 @@ class CodePilot {
 			return;
 		}
 		this.extensionContext = context;
-		this.globalStoragePath = context.globalStoragePath;
+		this.globalStoragePath = this.extensionContext.globalStoragePath;
 		this.dataStream = fs.createWriteStream(this.globalStoragePath, { flags: 'a' });
 		let initError;
 		exec('git rev-parse --show-toplevel', (error, stdout, stderr) => {
@@ -56,7 +57,7 @@ class CodePilot {
 					this.gitHeadWatcher = fs.watch(this.gitDir, "utf8", (event, filename) => {
 						if (filename === 'HEAD') {
 							this.log('git branch changed');
-							this.syncBranchAndCommit();
+							this.syncGit();
 						}
 					});
 				} catch (err) {
@@ -64,7 +65,7 @@ class CodePilot {
 					initError = err;
 					return;
 				}
-				this.syncBranchAndCommit();
+				this.syncGit();
 			}
 		});
 		if (initError) {
@@ -103,23 +104,38 @@ class CodePilot {
 	}
 
 	// mimic git packed-ref via files
-	private syncBranchAndCommit() {
-		fs.readFile(`${this.gitDir}/HEAD`, "utf8", (error, data) => {
+	private syncGit() {
+		const headPath = `${this.gitDir}/HEAD`;
+		fs.readFile(headPath, "utf8", (error, data) => {
 			if (error) {
-				this.log('error reading HEAD');
+				this.log(`error reading ${headPath}`);
 				return;
 			};
 			this.gitHead = data.trim();
-			this.gitCommit = this.gitHead; // in the case of detached HEAD
-			if (this.gitHead.startsWith('ref')) { // follow ref to get SHA
-				fs.readFile(`${this.gitDir}/${this.gitHead.substr(5)}`, "utf8", (error, data) => {
+			if (this.gitHead.startsWith('ref')) {
+				this.gitHead = this.gitHead.substr(5);
+				fs.readFile(`${this.gitDir}/${this.gitHead}`, "utf8", (error, data) => {
 					if (error) {
-						this.log('error following HEAD');
+						this.log(`error following HEAD to ${this.gitHead}`);
 						return;
 					};
 					this.gitCommit = data.trim();
-					this.log(`${this.gitHead} (HEAD) ${this.gitCommit} (SHA)`);
 				});
+				if (this.gitCommitWatcher) { // reset watcher
+					this.gitCommitWatcher.close();
+				}
+				this.gitCommitWatcher = fs.watch(`${this.gitDir}/${this.gitHead}`, "utf8", (event, filename) => {
+					this.log('git commit');
+					fs.readFile(`${this.gitDir}/${this.gitHead}`, "utf8", (error, data) => {
+						if (error) {
+							this.log(`error following HEAD to ${this.gitHead}`);
+							return;
+						};
+						this.gitCommit = data.trim();
+					});
+				});
+			} else {
+				this.gitCommit = this.gitHead; // detached HEAD
 			}
 		});
 	}
