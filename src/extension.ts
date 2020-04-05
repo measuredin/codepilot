@@ -56,7 +56,6 @@ class CodePilot {
 				try {
 					this.gitHeadWatcher = fs.watch(this.gitDir, "utf8", (event, filename) => {
 						if (filename === 'HEAD') {
-							this.log('git branch changed');
 							this.syncGit();
 						}
 					});
