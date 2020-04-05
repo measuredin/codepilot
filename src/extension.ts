@@ -124,6 +124,7 @@ class CodePilot {
 				if (this.gitCommitWatcher) { // reset watcher
 					this.gitCommitWatcher.close();
 				}
+				
 				this.gitCommitWatcher = fs.watch(`${this.gitDir}/${this.gitHead}`, "utf8", (event, filename) => {
 					this.log('git commit');
 					fs.readFile(`${this.gitDir}/${this.gitHead}`, "utf8", (error, data) => {
