@@ -57,6 +57,7 @@ class CodePilot {
 					this.gitHeadWatcher = fs.watch(this.gitDir, "utf8", (event, filename) => {
 						if (filename === 'HEAD') {
 							this.log('git branch changed');
+							this.streamEvent({ type: 'git', event: 'branch' });
 							this.syncGit();
 						}
 					});
@@ -125,15 +126,20 @@ class CodePilot {
 				if (this.gitCommitWatcher) { // reset watcher
 					this.gitCommitWatcher.close();
 				}
-				this.gitCommitWatcher = fs.watch(ref.split('/').slice(0, -1).join('/'), "utf8", (event, filename) => {
-					this.log('git commit');
-					fs.readFile(ref, "utf8", (error, data) => {
-						if (error) {
-							this.log(`error following HEAD to ${this.gitHead}`);
-							return;
-						};
-						this.gitCommit = data.trim();
-					});
+				const refPaths = ref.split('/');
+				this.gitCommitWatcher = fs.watch(refPaths.slice(0, -1).join('/'), "utf8", (event, filename) => {
+					if (filename === refPaths[refPaths.length - 1]) {
+						fs.readFile(ref, "utf8", (error, data) => {
+							if (error) {
+								this.log(`error following HEAD to ${this.gitHead}`);
+								return;
+							};
+							if (this.gitCommit !== data.trim()) {
+								this.streamEvent({ type: 'git', event: 'commit' });
+								this.gitCommit = data.trim();
+							}
+						});
+					}
 				});
 			} else {
 				this.gitCommit = this.gitHead; // detached HEAD
