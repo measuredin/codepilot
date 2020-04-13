@@ -2,6 +2,7 @@
 	"name": "codepilot",
 	"displayName": "codepilot",
 	"description": "CodePilot is your assistant for code discovery and navigation",
+	"repository": "https://github.com/measuredin/codepilot",
 	"version": "0.0.1",
 	"publisher": "measuredin",
 	"engines": {
