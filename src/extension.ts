@@ -21,7 +21,10 @@ class CodePilot {
 
 	private extensionContext?: vscode.ExtensionContext;
 	private globalStoragePath?: string;
+	private dataFilePath?: string;
+	private logFilePath?: string;
 	private dataStream?: fs.WriteStream;
+	private logStream?: fs.WriteStream;
 
 	private gitHeadWatcher? : fs.FSWatcher;
 	private gitCommitWatcher? : fs.FSWatcher;
@@ -31,7 +34,12 @@ class CodePilot {
 	private gitHead? : string; // possible detach HEAD mode
 
 	private log(msg: string) {
-		console.log(`CodePilot [${new Date}] - ${msg}`);
+		const log = `CodePilot [${new Date().toISOString()}] - ${msg}`;
+		if (this.logStream) {
+			this.logStream.write(log + "\n");
+		} else {
+			console.log(log);
+		}
 	}
 
 	public enable(context: vscode.ExtensionContext) {
@@ -40,7 +48,10 @@ class CodePilot {
 		}
 		this.extensionContext = context;
 		this.globalStoragePath = this.extensionContext.globalStoragePath;
-		this.dataStream = fs.createWriteStream(this.globalStoragePath, { flags: 'a' });
+		this.dataFilePath = `${this.globalStoragePath}.data`;
+		this.logFilePath = `${this.globalStoragePath}.log`;
+		this.dataStream = fs.createWriteStream(this.dataFilePath, { flags: 'a' });
+		this.logStream = fs.createWriteStream(this.logFilePath, { flags: 'a' });
 		let initError;
 		exec('git rev-parse --show-toplevel', (error, stdout, stderr) => {
 			if (error) {
@@ -49,8 +60,8 @@ class CodePilot {
 				return;
 			}
 			if (stdout) {
-				this.log(`git root: ${stdout}`);
 				this.gitRootDir = stdout.trim();
+				this.log(`git root: ${this.gitRootDir}`);
 				this.gitDir = `${this.gitRootDir}/.git`;
 				// watcher
 				try {
@@ -92,6 +103,9 @@ class CodePilot {
 		this.log('signing off');
 		if (this.dataStream) {
 			this.dataStream.end();
+		}
+		if (this.logStream) {
+			this.logStream.end();
 		}
 		this.subscriptions.forEach((listener) => {
 			listener.dispose();
