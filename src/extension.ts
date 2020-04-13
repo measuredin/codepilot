@@ -89,7 +89,7 @@ class CodePilot {
 		this.subscriptions.push(vscode.window.onDidChangeTextEditorSelection(this.textEditorSelectionHandler.bind(this)));
 		this.subscriptions.push(vscode.window.onDidOpenTerminal(this.terminalHandler.bind(this)));
 		this.subscriptions.push(vscode.window.onDidCloseTerminal(this.terminalHandler.bind(this)));
-		this.subscriptions.push(vscode.workspace.onDidChangeTextDocument(this.textDocumentHandler.bind(this)));
+		this.subscriptions.push(vscode.workspace.onDidChangeTextDocument(this.textDocumentChangeHandler.bind(this)));
 		this.subscriptions.push(vscode.workspace.onDidCloseTextDocument(this.textDocumentHandler.bind(this)));
 		this.subscriptions.push(vscode.debug.onDidStartDebugSession(this.debugSessionHandler.bind(this)));
 		this.subscriptions.push(vscode.debug.onDidChangeBreakpoints(this.breakpointHandler.bind(this)));
@@ -176,30 +176,42 @@ class CodePilot {
 	}
 
 	private windowStateHandler(event: vscode.WindowState) {
-		this.streamEvent({ type: 'window', ...event });
+		this.streamEvent({ type: 'window', data: { ...event }});
 	}
 
 	private activeTextEditorHandler(event?: vscode.TextEditor) {
-		console.log(event);
+		if (event) {
+			const { document, visibleRanges, selections } = event;
+			this.streamEvent({ type: 'active', data: { document, visibleRanges, selections } });
+		}
 	}
 
 	private textEditorSelectionHandler(event: vscode.TextEditorSelectionChangeEvent) {
-		console.log(event);
+		const { selections } = event;
+		this.streamEvent({ type: 'selection', data: { selections }});
 	}
 
 	private terminalHandler(event: vscode.Terminal) {
-		console.log(event);
+		const { creationOptions, exitStatus, name, processId } = event;
+		this.streamEvent({ type: 'terminal', data: { creationOptions, exitStatus, name, processId } });
 	}
 
-	private textDocumentHandler(event: vscode.TextDocument | vscode.TextDocumentChangeEvent) {
-		console.log(event);
+	private textDocumentChangeHandler(event: vscode.TextDocumentChangeEvent) {
+		const { document, contentChanges } = event;
+		const { fileName, isUntitled, languageId, isClosed, isDirty, lineCount, eol } = document;
+		this.streamEvent({ type: 'change', data: { contentChanges, fileName, isUntitled, languageId, isClosed, isDirty, lineCount, eol } });
+	}
+
+	private textDocumentHandler(event: vscode.TextDocument) {
+		const { fileName, isUntitled, languageId, isClosed, isDirty, lineCount, eol } = event;
+		this.streamEvent({ type: 'document', data: { fileName, isUntitled, languageId, isClosed, isDirty, lineCount, eol } });
 	}
 
 	private debugSessionHandler(event: vscode.DebugSession) {
-		console.log(event);
+		this.streamEvent({ type: 'debug', data: { ...event }});
 	}
 
 	private breakpointHandler(event: vscode.BreakpointsChangeEvent) {
-		console.log(event);
+		this.streamEvent({ type: 'breakpoint', data: { ...event } });
 	}
 }
